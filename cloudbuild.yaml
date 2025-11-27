@@ -1,0 +1,39 @@
+steps:
+# 1. Build the Docker image (Uses the Go service Dockerfile)
+- name: 'gcr.io/cloud-builders/docker'
+  id: Build Image
+  args:
+  - 'build'
+  - '-t'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/microservices-repo/quote-service:$COMMIT_SHA'
+  - '.'
+
+# 2. Push the Docker image to Artifact Registry
+- name: 'gcr.io/cloud-builders/docker'
+  id: Push Image
+  args:
+  - 'push'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/microservices-repo/quote-service:$COMMIT_SHA'
+
+# 3. Substitute the image tag in the Kubernetes manifest
+- name: 'gcr.io/cloud-builders/gcloud'
+  id: Update K8s Manifest
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  # Replaces the placeholder image tag in the quote-service deployment file
+  - |
+    sed -i "s|gcr.io/[PROJECT_ID]/quote-service:latest|us-central1-docker.pkg.dev/$PROJECT_ID/microservices-repo/quote-service:$COMMIT_SHA|g" k8s/quote-service.yaml
+    
+# 4. Apply the updated manifest to the GKE cluster
+- name: 'gcr.io/cloud-builders/kubectl'
+  id: Deploy to GKE
+  args:
+  - 'apply'
+  - '-f'
+  - 'k8s/quote-service.yaml'
+  - '--cluster=portfolio-cluster'
+  - '--zone=us-central1-a'
+env:
+- 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
+- 'CLOUDSDK_CONTAINER_CLUSTER=portfolio-cluster'
